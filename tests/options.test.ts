@@ -36,6 +36,23 @@ test('accepts distinct ids across rules', () => {
   expect(() => checkOptions(withRules(rule, { ...rule, id: 'b' }))).not.toThrow();
 });
 
+test.each(['function', 'call', 'jsx'] as const)(
+  'rejects a location question on a %s rule',
+  (target) => {
+    expect(() =>
+      checkOptions(withRules({ ...rule, target, location: { question: 'Where?', cutoff: 0.75 } })),
+    ).toThrow('location is supported only for file rules');
+  },
+);
+
+test('accepts a location question on a file rule', () => {
+  expect(() =>
+    checkOptions(
+      withRules({ ...rule, target: 'file', location: { question: 'Where?', cutoff: 0.75 } }),
+    ),
+  ).not.toThrow();
+});
+
 test('maps every target to the node types the README documents', () => {
   expect(TARGET_NODE_TYPES).toEqual({
     function: ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'],

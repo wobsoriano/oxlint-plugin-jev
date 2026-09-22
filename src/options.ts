@@ -62,6 +62,15 @@ export const SCHEMA = {
           id: { type: 'string', minLength: 1 },
           target: { enum: Object.keys(TARGET_NODE_TYPES) },
           question: { type: 'string', minLength: 1 },
+          location: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['question', 'cutoff'],
+            properties: {
+              question: { type: 'string', minLength: 1 },
+              cutoff: { type: 'number', minimum: 0.5, exclusiveMinimum: true, maximum: 1 },
+            },
+          },
           cutoff: { type: 'number', minimum: 0, maximum: 1 },
         },
       },
@@ -80,7 +89,8 @@ export function checkOptions(raw: unknown): ResolvedOptions {
   const options = raw as ResolvedOptions;
   if (!Array.isArray(options.rules)) fail('options.rules must list at least one rule');
   const seen = new Set<string>();
-  for (const { id } of options.rules) {
+  for (const { id, target, location } of options.rules) {
+    if (location && target !== 'file') fail('location is supported only for file rules');
     if (seen.has(id)) fail(`rule id "${id}" is used more than once`);
     seen.add(id);
   }

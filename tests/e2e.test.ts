@@ -263,6 +263,16 @@ const goodRule: JevRule = { id: 'a', target: 'call', question: 'Is it bad?', cut
 
 const badConfigs: [string, unknown, string][] = [
   [
+    'location is configured for a non-file rule',
+    { rules: [{ ...goodRule, location: { question: 'Where?', cutoff: 0.75 } }] },
+    'location is supported only for file rules',
+  ],
+  ...[0.5, 1.01].map((cutoff): [string, unknown, string] => [
+    `a location cutoff is outside (0.5, 1]: ${cutoff}`,
+    { rules: [{ ...goodRule, target: 'file', location: { question: 'Where?', cutoff } }] },
+    'cutoff',
+  ]),
+  [
     'a target is not one the plugin knows',
     { rules: [{ ...goodRule, target: 'class' }] },
     'Value "class" should be equal to one of the allowed values.',
