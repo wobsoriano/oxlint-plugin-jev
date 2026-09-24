@@ -24,13 +24,23 @@ test('lives under node_modules/.cache in the working directory', () => {
 test('reads the verdicts back out of a stored response', () => {
   const dir = scratch();
   writeCache(dir, key, response({ s0: 0.93, s1: 0.12 }));
-  expect(readCache(dir, key, ['s0', 's1'])).toEqual({ model, scores: { s0: 0.93, s1: 0.12 } });
+  expect(readCache(dir, key, ['s0', 's1'])).toEqual({
+    model,
+    scores: { s0: 0.93, s1: 0.12 },
+    answers: response({ s0: 0.93, s1: 0.12 }).answers,
+    complete: true,
+  });
 });
 
 test('creates the cache directory on first write', () => {
   const dir = path.join(scratch(), 'nested', 'deeper');
   writeCache(dir, key, response({ s0: 1 }));
-  expect(readCache(dir, key, ['s0'])).toEqual({ model, scores: { s0: 1 } });
+  expect(readCache(dir, key, ['s0'])).toEqual({
+    model,
+    scores: { s0: 1 },
+    answers: response({ s0: 1 }).answers,
+    complete: true,
+  });
 });
 
 test('leaves no temporary file behind', () => {
@@ -43,7 +53,12 @@ test('overwrites an earlier entry for the same key', () => {
   const dir = scratch();
   writeCache(dir, key, response({ s0: 0.1 }));
   writeCache(dir, key, response({ s0: 0.9 }));
-  expect(readCache(dir, key, ['s0'])).toEqual({ model, scores: { s0: 0.9 } });
+  expect(readCache(dir, key, ['s0'])).toEqual({
+    model,
+    scores: { s0: 0.9 },
+    answers: response({ s0: 0.9 }).answers,
+    complete: true,
+  });
 });
 
 test('misses when the entry does not exist', () => {

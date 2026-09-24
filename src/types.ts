@@ -1,5 +1,5 @@
 import type { Location, Range } from '@oxlint/plugins';
-import type { NoulQuestion } from '@typesafe-ai/sdk';
+import type { ChoiceQuestion, NoulQuestion } from '@typesafe-ai/sdk';
 
 export type Target = 'function' | 'call' | 'jsx' | 'file';
 
@@ -13,6 +13,8 @@ export interface JevRule {
   question: string;
   /** Report when Jev's yes-probability is >= this. Between 0 and 1. */
   cutoff: number;
+  /** File rules may select a source line, keeping a file-level finding below this probability. */
+  location?: { question: string; cutoff: number };
 }
 
 export interface JevOptions {
@@ -28,8 +30,9 @@ export interface JevOptions {
 export type ResolvedOptions = Required<JevOptions>;
 
 export interface RequestMatch {
-  readonly rule: { readonly question: string };
+  readonly rule: Pick<JevRule, 'question' | 'location'>;
   readonly snippet: string;
+  readonly truncated?: boolean;
 }
 
 export interface Match extends RequestMatch {
@@ -40,14 +43,21 @@ export interface Match extends RequestMatch {
 export interface JevRequest {
   model: string;
   state: { snippets: Record<string, string> };
-  questions: Record<string, NoulQuestion>;
+  questions: Record<string, NoulQuestion | ChoiceQuestion>;
 }
+
+export type ChoiceQuestions = Record<string, ChoiceQuestion['criteria']>;
 
 export interface Verdicts {
   /** The versioned id that answered, such as `jev-1.13.0`, even when the request said `jev-latest`. */
   readonly model: string;
   readonly scores: Record<string, number>;
+  readonly answers: Record<string, unknown>;
+  /** Whether every requested Choice answer is valid and can be cached. */
+  readonly complete: boolean;
 }
+
+export type VerdictResult = { ok: true; verdicts: Verdicts } | { ok: false; reason: string };
 
 export interface AskInput {
   apiKey: string;

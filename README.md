@@ -47,12 +47,13 @@ Add the plugin and its one rule, `jev/ask`, to `.oxlintrc.json`. Your English ru
 }
 ```
 
-| Field      | What it is                                                   |
-| ---------- | ------------------------------------------------------------ |
-| `id`       | Shown in the error message. Unique in the list.              |
-| `target`   | `"function"`, `"call"`, `"jsx"`, or `"file"`.                |
-| `question` | A yes/no question. "Yes" means "report this".                |
-| `cutoff`   | 0 to 1. Report when Jev's yes-probability is at or above it. |
+| Field      | What it is                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| `id`       | Shown in the error message. Unique in the list.                                                      |
+| `target`   | `"function"`, `"call"`, `"jsx"`, or `"file"`.                                                        |
+| `question` | A yes/no question. "Yes" means "report this".                                                        |
+| `cutoff`   | 0 to 1. Report when Jev's yes-probability is at or above it.                                         |
+| `location` | Optional for file rules: a source-location `question` and a `cutoff` greater than 0.5 and at most 1. |
 
 `target` decides what Jev gets to read. There is no selector syntax and no other target.
 
@@ -64,6 +65,25 @@ Add the plugin and its one rule, `jev/ask`, to `.oxlintrc.json`. Your English ru
 | `"file"`     | The whole file.                                                                                              | The first line       |
 
 The wording of the question is the rule, so be precise about what counts. "Does this send personal data" also fires on a legitimate `mailer.send(user.email, ...)`. "To a log or console" does not.
+
+File rules can point editor diagnostics and GitHub annotations to the suspected violation:
+
+```json
+{
+  "id": "prefer-boolean-state-helper",
+  "target": "file",
+  "question": "Does any boolean React state have a memoized callback that only sets it to true or false?",
+  "cutoff": 0.9,
+  "location": {
+    "question": "Select the declaration of the state used by the offending callback.",
+    "cutoff": 0.75
+  }
+}
+```
+
+The violation and location have separate confidence cutoffs. An uncertain or invalid location keeps
+the finding on the first line. Files truncated by `maxSnippetChars` also keep the first-line
+diagnostic; location questions only use complete source. Rules without `location` behave as before.
 
 | Setting             | Default        | Meaning                                                                                                                                            |
 | ------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,13 +97,22 @@ The wording of the question is the rule, so be precise about what counts. "Does 
 
 ## How it works
 
-One request per file, with every match in it.
+One initial request per file, with every match in it. A file rule with `location` includes numbered
+source and a Choice question. Above 254 nonblank lines, Jev selects a range and refines it in follow-up
+requests with the same full-file context. All requests share the per-file `timeoutMs` budget.
 
 Answers are cached under `node_modules/.cache/oxlint-plugin-jev`, keyed by the request. Changing a snippet or a question re-asks that file. Changing a cutoff or an `id` does not.
+
+Location responses are cached too, including valid uncertain answers. Malformed location answers
+are retried on the next run, including malformed entries already in the cache.
 
 The request runs on a worker thread through the official [`@typesafe-ai/sdk`](https://www.npmjs.com/package/@typesafe-ai/sdk) client, which retries rate limits and server errors within `timeoutMs`.
 
 If Jev can't be asked, because the key is missing, the request times out, or the API errors, the plugin prints one warning and reports nothing for that file. Set `ci: "fail"` to fail the run instead.
+
+If only a location refinement fails, confirmed violations are still reported at the file level.
+Under CI with `ci: "fail"`, the refinement failure produces a separate diagnostic; otherwise it warns.
+Later matches in that file keep their original locations without further refinement requests.
 
 ## In the editor
 

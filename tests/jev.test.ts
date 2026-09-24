@@ -1,5 +1,13 @@
 import { expect, test } from 'vite-plus/test';
-import { buildRequest, cacheKey, parseVerdicts, truncateSnippet } from '../src/jev.ts';
+import {
+  buildRequest,
+  cacheKey,
+  choiceQuestionsOf,
+  locationCandidates,
+  parseVerdicts,
+  selectedLocation,
+  truncateSnippet,
+} from '../src/jev.ts';
 import type { JevRule, RequestMatch } from '../src/types.ts';
 
 const secretRule: JevRule = {
@@ -64,12 +72,22 @@ test('reads a verdict per ref', () => {
     model,
     answers: { s0: { type: 'noul', noul: 0.93 }, s1: { type: 'noul', noul: 0.12 } },
   };
-  expect(parseVerdicts(json, ['s0', 's1'])).toEqual({ model, scores: { s0: 0.93, s1: 0.12 } });
+  expect(parseVerdicts(json, ['s0', 's1'])).toEqual({
+    model,
+    scores: { s0: 0.93, s1: 0.12 },
+    answers: json.answers,
+    complete: true,
+  });
 });
 
 test('ignores answers for refs that were not asked', () => {
   const json = { model, answers: { s0: { noul: 0.4 }, s9: { noul: 0.9 } } };
-  expect(parseVerdicts(json, ['s0'])).toEqual({ model, scores: { s0: 0.4 } });
+  expect(parseVerdicts(json, ['s0'])).toEqual({
+    model,
+    scores: { s0: 0.4 },
+    answers: json.answers,
+    complete: true,
+  });
 });
 
 const badResponses: [string, unknown, RegExp][] = [
@@ -118,7 +136,12 @@ for (const [name, json, message] of badResponses) {
 
 test('accepts the boundaries 0 and 1', () => {
   const json = { model, answers: { s0: { noul: 0 }, s1: { noul: 1 } } };
-  expect(parseVerdicts(json, ['s0', 's1'])).toEqual({ model, scores: { s0: 0, s1: 1 } });
+  expect(parseVerdicts(json, ['s0', 's1'])).toEqual({
+    model,
+    scores: { s0: 0, s1: 1 },
+    answers: json.answers,
+    complete: true,
+  });
 });
 
 const endpoint = 'https://api.typesafe.ai';
@@ -182,3 +205,87 @@ for (const [name, rule] of verdictNeutralEdits) {
     expect(cacheKey({ endpoint, request: edited })).toBe(cacheKey(keyInput));
   });
 }
+
+const locationMatch: RequestMatch = {
+  rule: {
+    question: 'Does this file log a secret?',
+    location: { question: 'Select the logging call.', cutoff: 0.75 },
+  },
+  snippet: '// Context\n\nconsole.log(secret);\n',
+};
+const locationRequest = buildRequest('jev-latest', [locationMatch]);
+const choices = choiceQuestionsOf(locationRequest);
+
+test('offers only nonblank source lines and an unknown location', () => {
+  expect(Object.keys(choices.s0_location)).toEqual(['L1', 'L3', 'unknown']);
+});
+
+test('an empty file offers only an unknown location', () => {
+  const empty = buildRequest('jev-latest', [{ ...locationMatch, snippet: ' \n\t' }]);
+  expect(Object.keys(choiceQuestionsOf(empty).s0_location)).toEqual(['unknown']);
+});
+
+test.each([254, 255, 70000])(
+  'bounds location choices for %i nonblank lines and refines to a line',
+  (count) => {
+    const snippet = 'code();\n'.repeat(count);
+    let candidates = locationCandidates(snippet);
+    for (let depth = 0; depth < 10; depth++) {
+      expect(Object.keys(candidates).length).toBeLessThanOrEqual(254);
+      const last = Object.values(candidates).at(-1)!;
+      expect(last.end).toBe(count);
+      if (last.start === last.end) return;
+      candidates = locationCandidates(snippet, last);
+    }
+    throw new Error('Location refinement did not reach a line');
+  },
+);
+
+const malformedChoices: unknown[] = [
+  undefined,
+  null,
+  'L3',
+  { type: 'noul', noul: 0.99 },
+  { type: 'choice', choice: 'L3' },
+  { type: 'choice', choice: 3, probabilities: { 3: 0.99 } },
+  { type: 'choice', choice: 'L2', probabilities: { L2: 0.99 } },
+  ...[NaN, Infinity, -0.01, 1.01, '0.99', null].map((probability) => ({
+    type: 'choice',
+    choice: 'L3',
+    probabilities: { L3: probability },
+  })),
+];
+
+test.each(malformedChoices)(
+  'preserves violation scores but rejects a malformed location (%j)',
+  (answer) => {
+    const json = { model, answers: { s0: { noul: 0.99 }, s0_location: answer } };
+    const verdicts = parseVerdicts(json, ['s0'], choices);
+    expect(verdicts.scores).toEqual({ s0: 0.99 });
+    expect(verdicts.complete).toBe(false);
+    expect(selectedLocation(answer, locationCandidates(locationMatch.snippet), 0.75)).toBe(null);
+  },
+);
+
+test.each([0, 0.6, 0.75, 1])(
+  'accepts a valid probability and locates only above cutoff (%s)',
+  (probability) => {
+    const answer = { type: 'choice', choice: 'L3', probabilities: { L3: probability } };
+    const verdicts = parseVerdicts({ model, answers: { s0_location: answer } }, [], choices);
+    expect(verdicts.complete).toBe(true);
+    expect(selectedLocation(answer, locationCandidates(locationMatch.snippet), 0.75)).toEqual(
+      probability >= 0.75 ? { start: 3, end: 3 } : null,
+    );
+  },
+);
+
+test('changing only a location cutoff reuses the same request', () => {
+  const changed = {
+    ...locationMatch,
+    rule: {
+      ...locationMatch.rule,
+      location: { question: 'Select the logging call.', cutoff: 0.9 },
+    },
+  };
+  expect(buildRequest('jev-latest', [changed])).toEqual(locationRequest);
+});
