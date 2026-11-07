@@ -57,6 +57,16 @@ test('numbers refs in match order', () => {
   expect(body.state.snippets.s2).toBe('third()');
 });
 
+test('names the file in the question for a file-target match', () => {
+  const fileRule: JevRule = { ...secretRule, id: 'file-name', target: 'file' };
+  const body = buildRequest('jev-latest', [
+    { rule: fileRule, snippet: 'export {}', file: 'src/user-reader.ts' },
+  ]);
+  expect(body.questions.s0?.instructions).toBe(
+    `Consider only snippet "s0" in state.snippets, the contents of the file src/user-reader.ts. ${secretRule.question}`,
+  );
+});
+
 test('leaves a snippet at the limit untouched', () => {
   expect(truncateSnippet('abcde', 5)).toBe('abcde');
 });

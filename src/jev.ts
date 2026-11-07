@@ -126,7 +126,7 @@ export function buildRequest(model: string, matches: readonly RequestMatch[]): J
       : match.snippet;
     questions[ref] = {
       type: 'noul',
-      instructions: `Consider only snippet "${ref}" in state.snippets. ${match.rule.question}`,
+      instructions: `Consider only snippet "${ref}" in state.snippets${match.file === undefined ? '' : `, the contents of the file ${match.file}`}. ${match.rule.question}`,
     };
     if (locates(match)) {
       questions[`${ref}_location`] = locationQuestion(

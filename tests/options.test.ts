@@ -186,6 +186,46 @@ test('sends the function itself when it has no parent', () => {
   expect(snippetNodeFor(node)).toBe(node);
 });
 
+const wrappedIn = (field: NamedField, parentType: string, calls: number): Fixture => {
+  const node: Fixture = { type: 'FunctionExpression', range: [0, 0] };
+  let current: Fixture = node;
+  for (let index = 0; index < calls; index += 1) {
+    const call: Fixture = { type: 'CallExpression', range: [0, 0] };
+    current.parent = { ...call, arguments: [current] };
+    current = current.parent;
+  }
+  current.parent = { type: parentType, range: [0, 0], [field]: current };
+  return node;
+};
+
+const outermost = (node: Fixture): Fixture | null | undefined => {
+  let current: Fixture | null | undefined = node.parent;
+  while (current?.type === 'CallExpression') current = current.parent;
+  return current;
+};
+
+test('sends the declaration for a function passed to a wrapper, like Effect.fn(name)(function* () {})', () => {
+  const node = wrappedIn('init', 'VariableDeclarator', 1);
+  expect(snippetNodeFor(node)).toBe(outermost(node));
+});
+
+test('climbs through several wrapping calls to the declaration', () => {
+  const node = wrappedIn('init', 'VariableDeclarator', 2);
+  expect(snippetNodeFor(node)).toBe(outermost(node));
+});
+
+test('sends the property for a wrapped function stored in an object', () => {
+  const node = wrappedIn('value', 'Property', 1);
+  expect(snippetNodeFor(node)).toBe(outermost(node));
+});
+
+test('sends the function itself when the wrapping call is not stored under a name', () => {
+  const node: Fixture = { type: 'ArrowFunctionExpression', range: [0, 0] };
+  const statement: Fixture = { type: 'ExpressionStatement', range: [0, 0] };
+  node.parent = { type: 'CallExpression', range: [0, 0], arguments: [node], parent: statement };
+  expect(snippetNodeFor(node)).toBe(node);
+});
+
 test('leaves a call inside a declarator alone, since only anonymous functions lose a name', () => {
   const node = childOf('VariableDeclarator', 'init', 'CallExpression');
   expect(snippetNodeFor(node)).toBe(node);

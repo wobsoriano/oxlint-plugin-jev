@@ -32,6 +32,7 @@ export type ResolvedOptions = Required<JevOptions>;
 export interface RequestMatch {
   readonly rule: Pick<JevRule, 'question' | 'location'>;
   readonly snippet: string;
+  readonly file?: string;
   readonly truncated?: boolean;
 }
 
@@ -77,6 +78,7 @@ export interface SnippetNode {
 export interface NamedParent extends SnippetNode {
   readonly init?: unknown;
   readonly value?: unknown;
+  readonly arguments?: readonly unknown[];
 }
 
 export interface ReportNode {
