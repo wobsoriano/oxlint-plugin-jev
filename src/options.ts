@@ -23,13 +23,20 @@ const isNamedParentType = (type: string): type is keyof typeof NAMED_PARENTS =>
 
 const ANONYMOUS_FUNCTIONS = new Set(['FunctionExpression', 'ArrowFunctionExpression']);
 
+// A function passed to a wrapper, such as `const load = Effect.fn('load')(function* () {})`,
+// takes its name from the declaration the wrapping calls initialize, so climb through them.
 export function snippetNodeFor(node: SnippetNode): SnippetNode {
-  const parent = node.parent;
+  if (!ANONYMOUS_FUNCTIONS.has(node.type)) return node;
+  let current: SnippetNode = node;
+  let parent = node.parent;
+  while (parent?.type === 'CallExpression' && parent.arguments?.includes(current)) {
+    current = parent;
+    parent = parent.parent;
+  }
   if (parent === null || parent === undefined) return node;
   const parentType = parent.type;
   if (!isNamedParentType(parentType)) return node;
-  const field = NAMED_PARENTS[parentType];
-  return ANONYMOUS_FUNCTIONS.has(node.type) && parent[field] === node ? parent : node;
+  return parent[NAMED_PARENTS[parentType]] === current ? parent : node;
 }
 
 export const DEFAULTS = {

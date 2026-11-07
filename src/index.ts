@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type {
   Context,
   ESTree,
@@ -216,6 +217,7 @@ function createOnce(context: Context): VisitorWithHooks {
         loc: REPORT_LOC[rule.target](node, own),
         snippet: truncateSnippet(text, pass.options.maxSnippetChars),
         truncated: text.length > pass.options.maxSnippetChars,
+        ...(rule.target === 'file' ? { file: path.relative(process.cwd(), context.filename) } : {}),
       });
     }
   };
